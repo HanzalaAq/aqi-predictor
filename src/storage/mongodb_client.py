@@ -2,6 +2,7 @@ from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure
 from src.utils.config import Config
 import logging
+import certifi
 
 logger = logging.getLogger(__name__)
 
@@ -15,9 +16,13 @@ class MongoDBClient:
         return cls._instance
     
     def _initialize(self):
-        """Initialize MongoDB connection"""
+        """Initialize MongoDB connection with SSL support"""
         try:
-            self.client = MongoClient(Config.MONGODB_URI)
+            # Use certifi for SSL certificate verification (fixes GitHub Actions SSL issue)
+            self.client = MongoClient(
+                Config.MONGODB_URI,
+                tlsCAFile=certifi.where()
+            )
             # Test connection
             self.client.admin.command('ping')
             logger.info("Successfully connected to MongoDB!")

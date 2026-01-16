@@ -5,6 +5,7 @@ xgboost==2.0.3
 lightgbm==4.1.0
 pymongo==4.6.1
 dnspython==2.4.2
+certifi==2024.2.2
 streamlit==1.29.0
 plotly==5.18.0
 shap==0.44.0
