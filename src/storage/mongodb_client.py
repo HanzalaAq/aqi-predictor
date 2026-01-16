@@ -3,56 +3,55 @@ from pymongo.errors import ConnectionFailure
 from src.utils.config import Config
 import logging
 import certifi
-import ssl
 
 logger = logging.getLogger(__name__)
 
 class MongoDBClient:
     _instance = None
+    _client = None
+    _initialized = False
     
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
-            cls._instance._initialize()
         return cls._instance
     
     def _initialize(self):
-        """Initialize MongoDB connection with SSL support"""
+        """Initialize MongoDB connection with lazy loading"""
+        if self._initialized:
+            return
+            
         try:
-            # Try multiple connection methods for GitHub Actions compatibility
+            logger.info("Initializing MongoDB connection...")
+            
+            # Connection parameters that work best with GitHub Actions
             connection_params = {
                 'tlsCAFile': certifi.where(),
-                'serverSelectionTimeoutMS': 5000,
-                'connectTimeoutMS': 10000,
+                'tlsAllowInvalidCertificates': True,  # Allows connection in GitHub Actions
+                'serverSelectionTimeoutMS': 10000,
+                'connectTimeoutMS': 20000,
+                'socketTimeoutMS': 20000,
                 'retryWrites': True,
                 'w': 'majority'
             }
             
-            # For GitHub Actions, we may need to disable SSL cert verification
-            # This is safe for MongoDB Atlas as it still uses TLS encryption
-            try:
-                self.client = MongoClient(Config.MONGODB_URI, **connection_params)
-                self.client.admin.command('ping')
-            except Exception as e:
-                logger.warning(f"First connection attempt failed: {e}")
-                logger.info("Trying alternative connection method...")
-                
-                # Alternative: Disable SSL cert verification (still encrypted, just no cert check)
-                connection_params['tlsAllowInvalidCertificates'] = True
-                self.client = MongoClient(Config.MONGODB_URI, **connection_params)
-                self.client.admin.command('ping')
+            self._client = MongoClient(Config.MONGODB_URI, **connection_params)
             
-            logger.info("Successfully connected to MongoDB!")
+            # Test connection
+            self._client.admin.command('ping')
+            logger.info("✅ Successfully connected to MongoDB!")
             
             # Initialize databases
-            self.feature_db = self.client[Config.MONGODB_DATABASE]
-            self.model_db = self.client[Config.MODEL_DATABASE]
-            self.prediction_db = self.client[Config.PREDICTION_DATABASE]
+            self.feature_db = self._client[Config.MONGODB_DATABASE]
+            self.model_db = self._client[Config.MODEL_DATABASE]
+            self.prediction_db = self._client[Config.PREDICTION_DATABASE]
             
-            # Create indexes for better performance
+            # Create indexes
             self._create_indexes()
             
-        except ConnectionFailure as e:
+            self._initialized = True
+            
+        except Exception as e:
             logger.error(f"Failed to connect to MongoDB: {e}")
             raise
     
@@ -73,22 +72,29 @@ class MongoDBClient:
             logger.warning(f"Index creation warning: {e}")
     
     def get_feature_store(self):
-        """Get feature store database"""
+        """Get feature store database - lazy initialize if needed"""
+        if not self._initialized:
+            self._initialize()
         return self.feature_db
     
     def get_model_registry(self):
-        """Get model registry database"""
+        """Get model registry database - lazy initialize if needed"""
+        if not self._initialized:
+            self._initialize()
         return self.model_db
     
     def get_prediction_store(self):
-        """Get prediction database"""
+        """Get prediction database - lazy initialize if needed"""
+        if not self._initialized:
+            self._initialize()
         return self.prediction_db
     
     def close(self):
         """Close MongoDB connection"""
-        if self.client:
-            self.client.close()
+        if self._client:
+            self._client.close()
+            self._initialized = False
             logger.info("MongoDB connection closed")
 
-# Global instance
+# Global instance (connection happens lazily when first used)
 mongodb_client = MongoDBClient()
