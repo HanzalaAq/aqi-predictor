@@ -17,43 +17,51 @@ class MongoDBClient:
         return cls._instance
     
     def _initialize(self):
-        """Initialize MongoDB connection with lazy loading"""
+        """Initialize MongoDB connection with lazy loading - no ping test"""
         if self._initialized:
             return
             
         try:
             logger.info("Initializing MongoDB connection...")
             
-            # Connection parameters that work best with GitHub Actions
+            # Connection parameters optimized for GitHub Actions
             connection_params = {
                 'tlsCAFile': certifi.where(),
-                'tlsAllowInvalidCertificates': True,  # Allows connection in GitHub Actions
-                'serverSelectionTimeoutMS': 10000,
-                'connectTimeoutMS': 20000,
-                'socketTimeoutMS': 20000,
+                'tlsAllowInvalidCertificates': True,
+                'serverSelectionTimeoutMS': 30000,
+                'connectTimeoutMS': 30000,
+                'socketTimeoutMS': 30000,
                 'retryWrites': True,
-                'w': 'majority'
+                'w': 'majority',
+                'maxPoolSize': 1  # Minimal connections for GitHub Actions
             }
             
             self._client = MongoClient(Config.MONGODB_URI, **connection_params)
             
-            # Test connection
-            self._client.admin.command('ping')
-            logger.info("✅ Successfully connected to MongoDB!")
+            # DON'T ping - let it connect lazily on first operation
+            # This avoids the SSL handshake during import
+            logger.info("MongoDB client created (connection will happen on first use)")
             
             # Initialize databases
             self.feature_db = self._client[Config.MONGODB_DATABASE]
             self.model_db = self._client[Config.MODEL_DATABASE]
             self.prediction_db = self._client[Config.PREDICTION_DATABASE]
             
-            # Create indexes
-            self._create_indexes()
-            
             self._initialized = True
             
         except Exception as e:
-            logger.error(f"Failed to connect to MongoDB: {e}")
+            logger.error(f"Failed to initialize MongoDB client: {e}")
             raise
+    
+    def _ensure_connection(self):
+        """Ensure connection is working - test on first real operation"""
+        try:
+            # This will trigger actual connection
+            self._client.admin.command('ping')
+            logger.info("✅ MongoDB connection verified!")
+        except Exception as e:
+            logger.warning(f"MongoDB ping failed (will retry on operations): {e}")
+            # Don't fail - connection might work when actually needed
     
     def _create_indexes(self):
         """Create indexes on collections for better query performance"""
@@ -68,8 +76,10 @@ class MongoDBClient:
             
             # Prediction indexes
             self.prediction_db[Config.PREDICTIONS_COLLECTION].create_index([("timestamp", -1)])
+            
+            logger.info("Database indexes created successfully")
         except Exception as e:
-            logger.warning(f"Index creation warning: {e}")
+            logger.warning(f"Index creation warning (non-critical): {e}")
     
     def get_feature_store(self):
         """Get feature store database - lazy initialize if needed"""
