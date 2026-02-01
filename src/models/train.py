@@ -86,6 +86,6 @@ def train_all_models(X, y):
     best_model_name = min(results, key=lambda k: results[k]['rmse'])
     best_model = models[best_model_name]
     
-    logger.info(f"\n✅ Best Model: {best_model_name.upper()}")
+    logger.info(f"\nBest Model: {best_model_name.upper()}")
     
     return best_model, best_model_name, results

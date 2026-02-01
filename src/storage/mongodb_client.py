@@ -1,67 +1,64 @@
+import certifi
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure
 from src.utils.config import Config
 import logging
-import certifi
 
 logger = logging.getLogger(__name__)
 
 class MongoDBClient:
     _instance = None
-    _client = None
-    _initialized = False
     
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
+            cls._instance._initialized = False
         return cls._instance
     
     def _initialize(self):
-        """Initialize MongoDB connection with lazy loading - no ping test"""
+        """Initialize MongoDB connection with SSL fix"""
         if self._initialized:
             return
             
         try:
-            logger.info("Initializing MongoDB connection...")
+            logger.info("Attempting to connect to MongoDB...")
             
-            # Connection parameters optimized for GitHub Actions
-            connection_params = {
-                'tlsCAFile': certifi.where(),
-                'tlsAllowInvalidCertificates': True,
-                'serverSelectionTimeoutMS': 30000,
-                'connectTimeoutMS': 30000,
-                'socketTimeoutMS': 30000,
-                'retryWrites': True,
-                'w': 'majority',
-                'maxPoolSize': 1  # Minimal connections for GitHub Actions
-            }
+            # SSL FIX: Critical parameters for MongoDB Atlas M0 compatibility
+            self.client = MongoClient(
+                Config.MONGODB_URI,
+                tlsCAFile=certifi.where(),              # Use certifi's CA bundle
+                tlsAllowInvalidCertificates=True,       # For GitHub Actions/Windows compatibility
+                serverSelectionTimeoutMS=30000,         # 30 second timeout
+                connectTimeoutMS=30000,
+                socketTimeoutMS=30000,
+                retryWrites=True,                       # Enable retry writes
+                w='majority'                            # Write concern
+            )
             
-            self._client = MongoClient(Config.MONGODB_URI, **connection_params)
-            
-            # DON'T ping - let it connect lazily on first operation
-            # This avoids the SSL handshake during import
-            logger.info("MongoDB client created (connection will happen on first use)")
+            # Test connection
+            self.client.admin.command('ping')
+            logger.info("✅ Successfully connected to MongoDB!")
             
             # Initialize databases
-            self.feature_db = self._client[Config.MONGODB_DATABASE]
-            self.model_db = self._client[Config.MODEL_DATABASE]
-            self.prediction_db = self._client[Config.PREDICTION_DATABASE]
+            self.feature_db = self.client[Config.MONGODB_DATABASE]
+            self.model_db = self.client[Config.MODEL_DATABASE]
+            self.prediction_db = self.client[Config.PREDICTION_DATABASE]
+            
+            # Create indexes for better performance
+            self._create_indexes()
             
             self._initialized = True
             
-        except Exception as e:
-            logger.error(f"Failed to initialize MongoDB client: {e}")
+        except ConnectionFailure as e:
+            logger.error(f"❌ Failed to connect to MongoDB: {e}")
+            logger.error("Please check:")
+            logger.error("1. MongoDB URI is correct")
+            logger.error("2. Network access is configured (0.0.0.0/0)")
+            logger.error("3. Database user has correct permissions")
             raise
-    
-    def _ensure_connection(self):
-        """Ensure connection is working - test on first real operation"""
-        try:
-            # This will trigger actual connection
-            self._client.admin.command('ping')
-            logger.info("✅ MongoDB connection verified!")
         except Exception as e:
-            logger.warning(f"MongoDB ping failed (will retry on operations): {e}")
-            # Don't fail - connection might work when actually needed
+            logger.error(f"❌ Unexpected error connecting to MongoDB: {e}")
+            raise
     
     def _create_indexes(self):
         """Create indexes on collections for better query performance"""
@@ -77,34 +74,33 @@ class MongoDBClient:
             # Prediction indexes
             self.prediction_db[Config.PREDICTIONS_COLLECTION].create_index([("timestamp", -1)])
             
-            logger.info("Database indexes created successfully")
+            logger.info("✅ Database indexes created")
         except Exception as e:
-            logger.warning(f"Index creation warning (non-critical): {e}")
+            logger.warning(f"⚠️ Could not create indexes: {e}")
     
     def get_feature_store(self):
-        """Get feature store database - lazy initialize if needed"""
+        """Get feature store database"""
         if not self._initialized:
             self._initialize()
         return self.feature_db
     
     def get_model_registry(self):
-        """Get model registry database - lazy initialize if needed"""
+        """Get model registry database"""
         if not self._initialized:
             self._initialize()
         return self.model_db
     
     def get_prediction_store(self):
-        """Get prediction database - lazy initialize if needed"""
+        """Get prediction database"""
         if not self._initialized:
             self._initialize()
         return self.prediction_db
     
     def close(self):
         """Close MongoDB connection"""
-        if self._client:
-            self._client.close()
-            self._initialized = False
+        if self.client:
+            self.client.close()
             logger.info("MongoDB connection closed")
 
-# Global instance (connection happens lazily when first used)
+# Global instance (lazy initialization)
 mongodb_client = MongoDBClient()
