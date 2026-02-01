@@ -307,7 +307,7 @@ if st.sidebar.button("🔄 Refresh"):
     st.cache_data.clear()
 ```
 
-Full issue documentation: [reports/Final_Report.md](./reports/Final_Report.md#4-technical-challenges--solutions)
+
 
 ---
 
@@ -347,10 +347,6 @@ Contributions welcome! Please:
 
 ---
 
-## 📄 License
-
-This project is licensed under the MIT License - see [LICENSE](LICENSE) file for details.
-
 ---
 
 ## 👨‍💻 Author
@@ -359,7 +355,7 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file for
 
 - GitHub: [@HanzalaAq](https://github.com/HanzalaAq)
 - Email: realhanzala56@gmail.com
-- LinkedIn: [Hanzala Afaq](https://linkedin.com/in/hanzalaafaq)
+- LinkedIn: [Hanzala Afaq](https://www.linkedin.com/in/muhammad-hanzala-afaq-3993b1257/)
 
 ---
 
@@ -370,15 +366,6 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file for
 - Streamlit for dashboard framework
 - GitHub Actions for CI/CD infrastructure
 - US EPA for AQI calculation standards
-
----
-
-## 📚 Documentation
-
-- [Complete Project Report](./reports/Final_Report.md)
-- [API Documentation](./docs/API.md)
-- [Deployment Guide](./docs/DEPLOYMENT.md)
-- [Troubleshooting](./docs/TROUBLESHOOTING.md)
 
 ---
 
